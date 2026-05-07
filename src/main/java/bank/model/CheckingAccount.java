@@ -5,54 +5,53 @@ import java.math.RoundingMode;
 
 /**
  * ============================================================================
- *  CheckingAccount.java                                       [PERSON A OWNS]
+ *  CheckingAccount.java
+ *  Owner: Abdul Rahman Fornah (afornah1@umbc.edu)
  * ============================================================================
  *
  *  RULES FOR THIS ACCOUNT TYPE:
- *      - Allows overdraft up to a limit (e.g. $100).
- *      - If you withdraw past the limit, the operation is REJECTED.
- *      - Charges no interest (rate = 0).
- *
- *  WHO USES IT:
- *      - TransactionService calls debit(...) on it.
- *      - OverdraftPolicy reads getOverdraftLimit().
- *      - InterestCalculator reads getMonthlyInterestRate() (will be zero).
- *
- *  EXAMPLE OF AN OVERRIDE PATTERN (similar shape -- not the exact code):
- *
- *      @Override
- *      public BigDecimal debit(BigDecimal amount) {
- *          BigDecimal projected = this.balance.subtract(amount);
- *          if (projected.compareTo(someLimit) < 0) {
- *              throw new IllegalStateException("would exceed overdraft");
- *          }
- *          this.balance = projected.setScale(2, RoundingMode.HALF_UP);
- *          return this.balance;
- *      }
+ *      - Allows overdraft up to a specified limit.
+ *      - Withdrawals exceeding the overdraft limit are rejected.
+ *      - This account type does not earn interest.
  * ============================================================================
  */
 public class CheckingAccount extends Account {
 
-    /** How far below zero the balance is allowed to go, e.g. -$100. */
+    /** The maximum allowed negative balance. Default is $100.00. */
     private BigDecimal overdraftLimit = new BigDecimal("100.00");
 
-    /** No-arg for Gson. */
+    /** No-argument constructor required for Gson deserialization. */
     protected CheckingAccount() { }
 
+    /**
+     * Initializes a new CheckingAccount.
+     * 
+     * @param id The account identifier.
+     * @param initialBalance The starting balance.
+     * @param overdraftLimit The maximum allowed overdraft amount.
+     */
     public CheckingAccount(String id, BigDecimal initialBalance, BigDecimal overdraftLimit) {
-        // TODO: call super("CHECKING", id, initialBalance).
-        // TODO: assign overdraftLimit.
+        super("CHECKING", id, initialBalance);
+        this.overdraftLimit = overdraftLimit;
     }
 
     /**
-     * Override debit() to enforce the overdraft rule.
+     * Subtracts an amount from the balance, enforcing the overdraft limit.
      *
-     * Reject (throw IllegalStateException) if (balance - amount) < -overdraftLimit.
-     * Otherwise behave like the parent class.
+     * @param amount The amount to withdraw.
+     * @throws IllegalStateException If the withdrawal would exceed the overdraft limit.
+     * @return The updated balance.
      */
     @Override
     public BigDecimal debit(BigDecimal amount) {
-        // TODO: see the example pattern in the class comment above.
+        BigDecimal projectedBalance = this.balance.subtract(amount);
+        
+        // Check if the projected balance would drop below the allowed overdraft limit.
+        // overdraftLimit is stored as a positive value (e.g., 100), so we compare against -overdraftLimit.
+        if (projectedBalance.compareTo(overdraftLimit.negate()) < 0) {
+            throw new IllegalStateException("Transaction rejected: Would exceed overdraft limit of $" + overdraftLimit);
+        }
+        
         return super.debit(amount);
     }
 

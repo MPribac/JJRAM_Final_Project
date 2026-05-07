@@ -4,51 +4,58 @@ import java.math.BigDecimal;
 
 /**
  * ============================================================================
- *  SavingsAccount.java                                        [PERSON A OWNS]
+ *  SavingsAccount.java
+ *  Owner: Abdul Rahman Fornah (afornah1@umbc.edu)
  * ============================================================================
  *
  *  RULES FOR THIS ACCOUNT TYPE:
- *      - Earns interest each month (e.g. 2.5% annual = ~0.208% monthly).
- *      - CANNOT go negative. Withdraw must be <= balance.
- *      - No overdraft.
- *
- *  WHAT TO IMPLEMENT:
- *      1. Constructor that calls super("SAVINGS", id, initialBalance) and
- *         stores the interestRate field.
- *      2. Override debit() to throw if (balance - amount) < 0.
- *      3. getMonthlyInterestRate() returns the field.
- *
- *  HINT for monthly rate:
- *      If interestRate is the ANNUAL rate (e.g. 0.025 for 2.5%), monthly is
- *      annualRate / 12. Decide as a team whether to store annual or monthly
- *      and be consistent. Store ANNUAL, do the /12 in getMonthlyInterestRate().
+ *      - Earns interest on the balance each month.
+ *      - Balance cannot fall below zero (no overdraft allowed).
  * ============================================================================
  */
 public class SavingsAccount extends Account {
 
-    /** Annual interest rate. Stored as a decimal: 0.025 = 2.5%. */
+    /** Annual interest rate as a decimal (e.g., 0.025 represents 2.5%). */
     private BigDecimal interestRate = new BigDecimal("0.025");
 
-    /** No-arg for Gson. */
+    /** No-argument constructor required for Gson deserialization. */
     protected SavingsAccount() { }
 
+    /**
+     * Initializes a new SavingsAccount.
+     * 
+     * @param id The account identifier.
+     * @param initialBalance The starting balance.
+     * @param annualInterestRate The annual interest rate as a decimal.
+     */
     public SavingsAccount(String id, BigDecimal initialBalance, BigDecimal annualInterestRate) {
-        // TODO: super("SAVINGS", id, initialBalance);
-        // TODO: this.interestRate = annualInterestRate;
+        super("SAVINGS", id, initialBalance);
+        this.interestRate = annualInterestRate;
     }
 
+    /**
+     * Subtracts an amount from the balance, ensuring it remains non-negative.
+     *
+     * @param amount The amount to withdraw.
+     * @throws IllegalStateException If there are insufficient funds.
+     * @return The updated balance.
+     */
     @Override
     public BigDecimal debit(BigDecimal amount) {
-        // TODO: if (balance - amount) < 0, throw IllegalStateException("insufficient funds")
-        //       otherwise super.debit(amount).
+        if (this.balance.subtract(amount).compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalStateException("Transaction rejected: Insufficient funds in savings account.");
+        }
         return super.debit(amount);
     }
 
+    /**
+     * Calculates the monthly interest rate based on the annual rate.
+     * 
+     * @return The monthly interest rate (Annual Rate / 12).
+     */
     @Override
     public BigDecimal getMonthlyInterestRate() {
-        // TODO: return interestRate divided by 12.
-        //       use: interestRate.divide(new BigDecimal("12"), 6, RoundingMode.HALF_UP)
-        return BigDecimal.ZERO;
+        return interestRate.divide(new BigDecimal("12"), 6, java.math.RoundingMode.HALF_UP);
     }
 
     public BigDecimal getAnnualInterestRate() {

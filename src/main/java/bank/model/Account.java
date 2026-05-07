@@ -5,79 +5,91 @@ import java.math.RoundingMode;
 
 /**
  * ============================================================================
- *  Account.java                                               [PERSON A OWNS]
+ *  Account.java
+ *  Owner: Abdul Rahman Fornah (afornah1@umbc.edu)
  * ============================================================================
  *
- *  WHAT THIS CLASS IS:
- *      The base class for all three account types. Anything that's true of
- *      EVERY account goes here (id, balance). Anything specific (interest
- *      rate, overdraft limit) goes in the subclass.
+ *  ABSTRACT BASE CLASS:
+ *      Represents the core properties and behaviors common to all bank accounts
+ *      (ID, balance, and transaction logic). Specific account types like 
+ *      Checking, Savings, and Loan extend this class to implement their unique
+ *      rules (interest rates, overdraft limits, etc.).
  *
- *  WHY ABSTRACT:
- *      So no one can do `new Account(...)` -- they must pick a real type
- *      (CheckingAccount, SavingsAccount, LoanAccount).
- *
- *  IMPORTANT FOR PERSON C:
- *      Gson cannot guess which subclass to deserialize from a JSON object.
- *      We solve this with the `type` field below. When loading JSON, Person C
- *      will read `type`, then build the right subclass manually.
- *
- *  IMPORTANT FOR EVERYONE:
- *      Money is `BigDecimal`. Never `double`.
+ *  KEY DESIGN DECISIONS:
+ *      1. ABSTRACT: Prevents direct instantiation of a generic "Account".
+ *         Users must use specific types (CheckingAccount, SavingsAccount, LoanAccount).
+ *      2. TYPE FIELD: Used for JSON deserialization (handled by Person C). 
+ *         Since Gson cannot automatically determine which subclass to create, 
+ *         this field identifies the account type.
+ *      3. BIGDECIMAL: Used for all monetary values to ensure precision. 
+ *         Standard floating-point types (double/float) are avoided due to 
+ *         rounding errors in financial calculations.
  * ============================================================================
  */
 public abstract class Account {
 
     // ------------------------------------------------------------------
-    // Fields shared by every account type.
+    // Core Fields
     // ------------------------------------------------------------------
 
-    /** "CHECKING", "SAVINGS", or "LOAN". Used by Person C when deserializing. */
+    /** The type of account ("CHECKING", "SAVINGS", "LOAN"). Essential for JSON parsing. */
     protected String type;
 
-    /** Account number, e.g. "CHK-1001". */
+    /** Unique identifier for the account, e.g., "CHK-1001". */
     protected String id;
 
-    /** Money in the account. Negative on a Loan = amount still owed. */
+    /** 
+     * Current account balance. 
+     * For LoanAccounts, a negative balance indicates the amount owed. 
+     */
     protected BigDecimal balance = BigDecimal.ZERO;
 
     // ------------------------------------------------------------------
     // Constructors
     // ------------------------------------------------------------------
 
-    /** No-arg constructor for Gson. Don't delete. */
+    /** 
+     * No-argument constructor required for Gson deserialization.
+     */
     protected Account() { }
 
+    /**
+     * Protected constructor for use by subclasses.
+     * 
+     * @param type The account type identifier.
+     * @param id The unique account ID.
+     * @param initialBalance Starting balance, which will be normalized to 2 decimal places.
+     */
     protected Account(String type, String id, BigDecimal initialBalance) {
-        // TODO: assign type, id.
-        // TODO: assign balance, but normalized to 2 decimal places.
-        //       use: initialBalance.setScale(2, RoundingMode.HALF_UP)
+        this.type = type;
+        this.id = id;
+        this.balance = initialBalance.setScale(2, RoundingMode.HALF_UP);
     }
 
     // ------------------------------------------------------------------
-    // Balance changes -- ONLY way Person B's code should change a balance.
+    // Transaction Methods
     // ------------------------------------------------------------------
 
     /**
-     * Add to the balance. Returns the new balance.
+     * Adds a specified amount to the account balance.
      *
-     * EXAMPLE PATTERN (this one's actually pretty close to right):
-     *
-     *     this.balance = this.balance.add(amount).setScale(2, RoundingMode.HALF_UP);
-     *     return this.balance;
+     * @param amount The amount to credit.
+     * @return The updated account balance.
      */
     public BigDecimal credit(BigDecimal amount) {
-        // TODO: add `amount` to balance, round to 2dp, return new balance.
+        this.balance = this.balance.add(amount).setScale(2, RoundingMode.HALF_UP);
         return this.balance;
     }
 
     /**
-     * Subtract from balance. Subclass decides whether this is allowed.
-     * Default behavior: just subtract. CheckingAccount overrides to enforce
-     * overdraft rules. SavingsAccount overrides to block negative balance.
+     * Subtracts a specified amount from the account balance.
+     * Subclasses may override this method to enforce specific rules (e.g., overdraft limits).
+     *
+     * @param amount The amount to debit.
+     * @return The updated account balance.
      */
     public BigDecimal debit(BigDecimal amount) {
-        // TODO: subtract `amount` from balance, round to 2dp, return new balance.
+        this.balance = this.balance.subtract(amount).setScale(2, RoundingMode.HALF_UP);
         return this.balance;
     }
 

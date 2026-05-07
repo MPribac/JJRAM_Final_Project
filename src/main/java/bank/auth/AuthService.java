@@ -5,38 +5,19 @@ import bank.persistence.DataRepository;
 
 /**
  * ============================================================================
- *  AuthService.java                                           [PERSON A OWNS]
+ *  AuthService.java
+ *  Owner: Abdul Rahman Fornah (afornah1@umbc.edu)
  * ============================================================================
  *
- *  WHAT THIS CLASS DOES:
- *      The login gate. Takes a customer ID + PIN, asks the repository to find
- *      that customer, asks the Customer if the PIN matches, and returns the
- *      Customer if it does (or null if it doesn't).
+ *  ROLE:
+ *      Acts as the authentication gateway for the banking application. It 
+ *      handles user login, session management (tracking the current user), 
+ *      and account unlocking services.
  *
- *      Also tracks "current user" for the session and handles logout.
- *
- *  WHO USES IT:
- *      Main.java's login loop.
- *
- *  RULES:
- *      - 3 wrong PINs in a row -> the Customer object's `locked` flag goes true.
- *        Person A handles that inside Customer.verifyPin().
- *      - Locked customers can't log in until an admin unlocks them.
- *
- *  EXAMPLE PATTERN for the login() body:
- *
- *      public Customer login(String id, String pin) {
- *          Customer c = repository.findCustomer(id);
- *          if (c == null) return null;        // unknown ID
- *          if (c.isLocked()) return null;     // already locked
- *          if (c.verifyPin(pin)) {
- *              this.currentUser = c;
- *              repository.save();             // save updated attempt counter
- *              return c;
- *          }
- *          repository.save();                 // save the failed-attempt change
- *          return null;
- *      }
+ *  LOGIC:
+ *      - Uses DataRepository to fetch customer information.
+ *      - Delegates PIN verification to the Customer model.
+ *      - Persists state changes (like failed attempts) back to the repository.
  * ============================================================================
  */
 public class AuthService {
@@ -44,23 +25,49 @@ public class AuthService {
     private final DataRepository repository;
     private Customer currentUser;
 
+    /**
+     * Initializes the AuthService with a reference to the data repository.
+     * 
+     * @param repository The repository used for customer data access.
+     */
     public AuthService(DataRepository repository) {
-        // TODO: assign the repository.
         this.repository = repository;
     }
 
     /**
-     * Try to log in. Return the Customer on success, null on failure.
-     * Don't print anything from inside here -- Main.java does the I/O.
+     * Authenticates a user based on their ID and PIN.
+     *
+     * @param customerId The ID of the customer attempting to log in.
+     * @param pin The plaintext PIN provided.
+     * @return The authenticated Customer object on success; null if login fails.
      */
     public Customer login(String customerId, String pin) {
-        // TODO: implement the example pattern above.
+        Customer customer = repository.findCustomer(customerId);
+        
+        if (customer == null) {
+            return null; // Customer not found
+        }
+        
+        if (customer.isLocked()) {
+            return null; // Account is locked due to too many failed attempts
+        }
+        
+        if (customer.verifyPin(pin)) {
+            this.currentUser = customer;
+            repository.save(); // Persist the reset of failed attempts
+            return customer;
+        }
+        
+        // PIN was incorrect; Customer.verifyPin already updated failed attempts/lock status.
+        repository.save(); // Persist the incremented failed attempt counter or lock status
         return null;
     }
 
-    /** Clear the current user. Always succeeds. */
+    /**
+     * Logs out the current user by clearing the session.
+     */
     public void logout() {
-        // TODO: set currentUser to null.
+        this.currentUser = null;
     }
 
     public Customer getCurrentUser() {
@@ -68,14 +75,19 @@ public class AuthService {
     }
 
     /**
-     * Admin-only: unlock a customer who got locked out.
-     * (You don't have to wire this to a menu option in v1, but write it.)
+     * Administrative function to unlock a locked customer account.
+     *
+     * @param customerId The ID of the customer to unlock.
+     * @return true if the customer was found and unlocked; false otherwise.
      */
     public boolean unlock(String customerId) {
-        // TODO:
-        //  1. Find customer in repo.
-        //  2. If not found, return false.
-        //  3. Call customer.unlock(), save, return true.
-        return false;
+        Customer customer = repository.findCustomer(customerId);
+        if (customer == null) {
+            return false;
+        }
+        
+        customer.unlock();
+        repository.save();
+        return true;
     }
 }

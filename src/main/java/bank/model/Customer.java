@@ -7,27 +7,18 @@ import java.util.List;
 
 /**
  * ============================================================================
- *  Customer.java                                              [PERSON A OWNS]
+ *  Customer.java
+ *  Owner: Abdul Rahman Fornah (afornah1@umbc.edu)
  * ============================================================================
  *
- *  WHAT THIS CLASS REPRESENTS:
- *      One person who has accounts at the bank. They have an ID, a name, a
- *      hashed PIN, and a list of accounts (Checking, Savings, Loan).
+ *  REPRESENTS:
+ *      A bank customer who owns multiple accounts. This class manages the 
+ *      customer's profile, authentication security (hashed PINs, lockouts), 
+ *      and provides access to their account and transaction history.
  *
- *  WHO USES IT:
- *      - AuthService           -> checks PIN against this customer
- *      - TransactionService    -> finds an account by ID inside this customer
- *      - StatementGenerator    -> reads name and transactions to print
- *      - JsonStore             -> serializes/deserializes this object
- *
- *  WHAT YOU NEED TO DO:
- *      Fill in the TODOs. The fields are mostly here. The methods need bodies.
- *
- *  GOTCHAS:
- *      1. Gson needs a no-arg constructor. The protected one below is for that.
- *      2. Don't store PINs as plaintext. Always hash before storing.
- *      3. The list of transactions belongs to the Customer (not Account) so
- *         it's easy for Person C to load all of a customer's history at once.
+ *  SECURITY:
+ *      - PINs are never stored in plaintext. They are hashed using SHA-256.
+ *      - Implements a 3-strike lockout policy for failed login attempts.
  * ============================================================================
  */
 public class Customer {
@@ -52,10 +43,19 @@ public class Customer {
     /** No-arg constructor required by Gson. Don't delete. */
     protected Customer() { }
 
+    /**
+     * Initializes a new Customer.
+     * 
+     * @param id The unique customer ID.
+     * @param name The customer's full name.
+     * @param rawPin The initial PIN (will be hashed before storage).
+     */
     public Customer(String id, String name, String rawPin) {
-        // TODO: assign id and name.
-        // TODO: hash the rawPin and store it in pinHash (use hashPin() below).
-        // TODO: leave failedLoginAttempts at 0 and locked at false.
+        this.id = id;
+        this.name = name;
+        this.pinHash = hashPin(rawPin);
+        this.failedLoginAttempts = 0;
+        this.locked = false;
     }
 
     // ------------------------------------------------------------------
@@ -63,25 +63,28 @@ public class Customer {
     // ------------------------------------------------------------------
 
     /**
-     * Returns true if the given PIN matches the stored hash.
+     * Authenticates the customer by comparing the provided PIN with the stored hash.
+     * Also manages the failed attempt counter and account locking.
      *
-     * EXAMPLE PATTERN (similar shape -- DON'T copy verbatim, the real method
-     * also has to handle the locked flag and the failed attempt counter):
-     *
-     *     public boolean checkSomething(String input) {
-     *         String hashed = hashPin(input);
-     *         return hashed.equals(this.pinHash);
-     *     }
+     * @param rawPin The plaintext PIN provided by the user.
+     * @return true if the PIN is correct and the account is not locked; false otherwise.
      */
     public boolean verifyPin(String rawPin) {
-        // TODO:
-        //  1. If the account is locked, return false immediately.
-        //  2. Hash the rawPin.
-        //  3. Compare to stored pinHash.
-        //  4. If it matches: reset failedLoginAttempts to 0 and return true.
-        //  5. If it doesn't: increment failedLoginAttempts. If >= 3, set locked = true.
-        //     Return false.
-        return false;
+        if (this.locked) {
+            return false;
+        }
+
+        String hashedInput = hashPin(rawPin);
+        if (hashedInput.equals(this.pinHash)) {
+            this.failedLoginAttempts = 0;
+            return true;
+        } else {
+            this.failedLoginAttempts++;
+            if (this.failedLoginAttempts >= 3) {
+                this.locked = true;
+            }
+            return false;
+        }
     }
 
     /**
@@ -104,27 +107,36 @@ public class Customer {
     // ------------------------------------------------------------------
 
     /**
-     * Find one of this customer's accounts by ID. Return null if not found.
+     * Retrieves an account owned by this customer by its ID.
      *
-     * EXAMPLE PATTERN:
-     *
-     *     for (Thing t : list) {
-     *         if (t.getId().equals(id)) return t;
-     *     }
-     *     return null;
+     * @param accountId The ID of the account to find.
+     * @return The Account object if found; null otherwise.
      */
     public Account findAccount(String accountId) {
-        // TODO: loop through accounts, return the one whose ID matches, else null.
+        for (Account account : accounts) {
+            if (account.getId().equals(accountId)) {
+                return account;
+            }
+        }
         return null;
     }
 
+    /**
+     * Adds a new account to the customer's profile.
+     * 
+     * @param a The account to add.
+     */
     public void addAccount(Account a) {
-        // TODO: add to the accounts list.
+        this.accounts.add(a);
     }
 
+    /**
+     * Records a transaction in the customer's history.
+     * 
+     * @param t The transaction to record.
+     */
     public void recordTransaction(Transaction t) {
-        // TODO: add to the transactions list.
-        //       Person B's TransactionService will call this every time money moves.
+        this.transactions.add(t);
     }
 
     // ------------------------------------------------------------------
@@ -138,8 +150,11 @@ public class Customer {
     public List<Account> getAccounts() { return accounts; }
     public List<Transaction> getTransactions() { return transactions; }
 
-    // Used by AuthService when an admin unlocks a customer:
+    /**
+     * Unlocks the customer account and resets the failed login attempt counter.
+     */
     public void unlock() {
-        // TODO: set locked = false and failedLoginAttempts = 0.
+        this.locked = false;
+        this.failedLoginAttempts = 0;
     }
 }
