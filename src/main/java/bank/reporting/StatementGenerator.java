@@ -3,87 +3,204 @@ package bank.reporting;
 import bank.model.Account;
 import bank.model.Customer;
 import bank.model.Transaction;
-import bank.model.TransactionType;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
  * ============================================================================
- *  StatementGenerator.java                                    [PERSON C OWNS]
+ *  StatementGenerator.java
+ *  Owner: John (smartdude879@gmail.com)
  * ============================================================================
  *
- *  WHAT THIS DOES:
- *      Builds a string that looks like a bank statement and returns it.
- *      Main.java prints whatever you return.
+ *  ROLE:
+ *      Prints a formatted monthly statement to the terminal for a given customer
+ *      and date range.
  *
- *  WHAT GOES IN A STATEMENT:
- *      - Header: customer name, statement period
- *      - For each account: id, type, opening balance, every transaction in
- *        the period, closing balance
- *      - Footer: total deposits, withdrawals, fees, interest
- *
- *  EXAMPLE OUTPUT (target style -- doesn't have to be pixel-perfect):
- *
- *  ============================================================
- *   STATEMENT FOR Jane Doe (1001)
- *   Period: 2026-04-01  ->  2026-04-30
- *  ============================================================
- *
- *   Account: CHK-1001 (CHECKING)
- *   Opening balance: $500.00
- *  ------------------------------------------------------------
- *   2026-04-02  DEPOSIT      +$200.00   Cash deposit
- *   2026-04-15  WITHDRAW     -$50.00    ATM withdrawal
- *  ------------------------------------------------------------
- *   Closing balance: $650.00
- *
- *   Account: SAV-1001 (SAVINGS)
- *   ...
- *
- *   ----- SUMMARY -----
- *   Deposits:    $1200.00
- *   Withdrawals: $50.00
- *   Fees:        $0.00
- *   Interest:    $4.16
- *
- *  EXAMPLE PATTERN for building output:
- *
- *      StringBuilder sb = new StringBuilder();
- *      sb.append("========\n");
- *      sb.append(" STATEMENT FOR ").append(customer.getName()).append("\n");
- *      ...
- *      return sb.toString();
+ *  STRUCTURE:
+ *      - Header              : customer name, statement period
+ *      - Per-account section : account ID, type, opening balance,
+ *                              transactions, closing balance
+ *      - Footer              : totals for deposits, withdrawals, fees, interest
  * ============================================================================
  */
 public class StatementGenerator {
 
+    private static final int LINE_WIDTH = 65;
+    private static final String DIVIDER = "-".repeat(LINE_WIDTH);
+    private static final String DOUBLE_DIVIDER = "=".repeat(LINE_WIDTH);
+    private static final DateTimeFormatter DATE_FMT =
+            DateTimeFormatter.ofPattern("MMM dd, yyyy HH:mm");
+    private static final DateTimeFormatter PERIOD_FMT =
+            DateTimeFormatter.ofPattern("MMM dd, yyyy");
+    private static final DateTimeFormatter ROW_FMT =
+            DateTimeFormatter.ofPattern("MMM dd HH:mm");
+
     /**
-     * Build the statement for one customer over a date range.
-     * Both dates are inclusive.
+     * Generates and prints the statement for the customer between fromDate and
+     * toDate (both inclusive).
+     *
+     * @param customer  the customer whose statement to print
+     * @param fromDate  start of statement period (inclusive)
+     * @param toDate    end of statement period (inclusive)
      */
-    public String generate(Customer customer, LocalDate from, LocalDate to) {
-        // TODO: build a StringBuilder, append header, loop accounts, append
-        //       transactions in range, append summary totals, return string.
-        return "";
+    public void generate(Customer customer, LocalDateTime fromDate, LocalDateTime toDate) {
+        printHeader(customer, fromDate, toDate);
+
+        BigDecimal totalDeposits    = BigDecimal.ZERO;
+        BigDecimal totalWithdrawals = BigDecimal.ZERO;
+        BigDecimal totalFees        = BigDecimal.ZERO;
+        BigDecimal totalInterest    = BigDecimal.ZERO;
+
+        for (Account account : customer.getAccounts()) {
+            // Pick out this account's transactions inside the date range.
+            List<Transaction> txns = new ArrayList<>();
+            for (Transaction t : customer.getTransactions()) {
+                boolean sameAccount = t.getAccountId().equals(account.getId());
+                boolean inRange = !t.getTimestamp().isBefore(fromDate)
+                        && !t.getTimestamp().isAfter(toDate);
+                if (sameAccount && inRange) {
+                    txns.add(t);
+                }
+            }
+            Collections.sort(txns, (a, b) -> a.getTimestamp().compareTo(b.getTimestamp()));
+
+            // Opening balance = current balance MINUS everything that happened
+            // in this period.
+            BigDecimal closingBalance = account.getBalance();
+            BigDecimal netEffect = BigDecimal.ZERO;
+            for (Transaction t : txns) {
+                netEffect = netEffect.add(signedAmount(t));
+            }
+            BigDecimal openingBalance = closingBalance.subtract(netEffect);
+
+            printAccountSection(account, openingBalance, closingBalance, txns);
+
+            for (Transaction t : txns) {
+                switch (t.getType()) {
+                    case DEPOSIT:
+                    case TRANSFER_IN:
+                        totalDeposits = totalDeposits.add(t.getAmount());
+                        break;
+                    case WITHDRAW:
+                    case TRANSFER_OUT:
+                        totalWithdrawals = totalWithdrawals.add(t.getAmount());
+                        break;
+                    case FEE:
+                        totalFees = totalFees.add(t.getAmount());
+                        break;
+                    case INTEREST:
+                        totalInterest = totalInterest.add(t.getAmount());
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+
+        printFooter(totalDeposits, totalWithdrawals, totalFees, totalInterest);
     }
 
-    // ------------------------------------------------------------------
-    // Helper ideas (private). Implement what you need.
-    // ------------------------------------------------------------------
+    // ── Print helpers ─────────────────────────────────────────────────────────
 
-    /** Filter a customer's transactions to a given account + date range. */
-    private List<Transaction> txForAccountInRange(Customer c, String accountId,
-                                                  LocalDate from, LocalDate to) {
-        // TODO: stream, filter, collect.
-        return List.of();
+    private void printHeader(Customer customer, LocalDateTime from, LocalDateTime to) {
+        System.out.println();
+        System.out.println(DOUBLE_DIVIDER);
+        System.out.println(center("ACCOUNT STATEMENT", LINE_WIDTH));
+        System.out.println(DOUBLE_DIVIDER);
+        System.out.printf("  Customer   : %s (ID: %s)%n", customer.getName(), customer.getId());
+        System.out.printf("  Period     : %s  ->  %s%n",
+                from.format(PERIOD_FMT), to.format(PERIOD_FMT));
+        System.out.printf("  Generated  : %s%n", LocalDateTime.now().format(DATE_FMT));
+        System.out.println(DOUBLE_DIVIDER);
     }
 
-    /** Sum the amounts of transactions matching a given type. */
-    private BigDecimal sumOfType(List<Transaction> txs, TransactionType type) {
-        // TODO: stream + filter + map + reduce.
-        return BigDecimal.ZERO;
+    private void printAccountSection(Account account,
+                                     BigDecimal openingBalance,
+                                     BigDecimal closingBalance,
+                                     List<Transaction> txns) {
+        System.out.println();
+        System.out.println(DIVIDER);
+        System.out.printf("  Account : %-20s  Type: %s%n",
+                account.getId(), account.getType());
+        System.out.println(DIVIDER);
+        System.out.printf("  %-38s  %10s%n", "Opening Balance", fmt(openingBalance));
+        System.out.println(DIVIDER);
+
+        if (txns.isEmpty()) {
+            System.out.println("  No transactions in this period.");
+        } else {
+            System.out.printf("  %-12s  %-18s  %-12s  %10s%n",
+                    "Date", "Description", "Type", "Amount");
+            System.out.println("  " + ".".repeat(LINE_WIDTH - 2));
+            for (Transaction t : txns) {
+                System.out.printf("  %-12s  %-18s  %-12s  %10s%n",
+                        t.getTimestamp().format(ROW_FMT),
+                        truncate(t.getDescription(), 18),
+                        t.getType(),
+                        signedFmt(t));
+            }
+        }
+
+        System.out.println(DIVIDER);
+        System.out.printf("  %-38s  %10s%n", "Closing Balance", fmt(closingBalance));
+    }
+
+    private void printFooter(BigDecimal deposits,
+                              BigDecimal withdrawals,
+                              BigDecimal fees,
+                              BigDecimal interest) {
+        System.out.println();
+        System.out.println(DOUBLE_DIVIDER);
+        System.out.println(center("SUMMARY", LINE_WIDTH));
+        System.out.println(DOUBLE_DIVIDER);
+        System.out.printf("  %-38s  %10s%n", "Total Deposits",    fmt(deposits));
+        System.out.printf("  %-38s  %10s%n", "Total Withdrawals", fmt(withdrawals));
+        System.out.printf("  %-38s  %10s%n", "Total Fees",        fmt(fees));
+        System.out.printf("  %-38s  %10s%n", "Total Interest",    fmt(interest));
+        System.out.println(DOUBLE_DIVIDER);
+        System.out.println();
+    }
+
+    // ── Formatting utilities ──────────────────────────────────────────────────
+
+    /** Signed net effect of a transaction (positive = credit, negative = debit). */
+    private BigDecimal signedAmount(Transaction t) {
+        switch (t.getType()) {
+            case DEPOSIT:
+            case TRANSFER_IN:
+            case INTEREST:
+                return t.getAmount();
+            case WITHDRAW:
+            case TRANSFER_OUT:
+            case FEE:
+                return t.getAmount().negate();
+            default:
+                return BigDecimal.ZERO;
+        }
+    }
+
+    private String signedFmt(Transaction t) {
+        BigDecimal signed = signedAmount(t);
+        String prefix = signed.compareTo(BigDecimal.ZERO) >= 0 ? "+" : "";
+        return prefix + fmt(signed);
+    }
+
+    private String fmt(BigDecimal value) {
+        return String.format("$%,.2f", value);
+    }
+
+    private String center(String text, int width) {
+        int padding = (width - text.length()) / 2;
+        return " ".repeat(Math.max(0, padding)) + text;
+    }
+
+    private String truncate(String s, int max) {
+        if (s == null) return "";
+        return s.length() <= max ? s : s.substring(0, max - 1) + "~";
     }
 }

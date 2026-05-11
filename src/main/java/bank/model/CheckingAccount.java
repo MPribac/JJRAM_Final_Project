@@ -6,7 +6,8 @@ import java.math.RoundingMode;
 /**
  * ============================================================================
  *  CheckingAccount.java
- *  Owner: Abdul Rahman Fornah (afornah1@umbc.edu)
+ *  Owner    : Abdul Rahman Fornah (afornah1@umbc.edu)
+ *  Helped by: Jordon Tang         (jtang10@umbc.edu)
  * ============================================================================
  *
  *  RULES FOR THIS ACCOUNT TYPE:

@@ -1,115 +1,215 @@
 package bank.persistence;
 
-import bank.model.Customer;
+import bank.model.Account;
+import bank.model.Bank;
+import bank.model.CheckingAccount;
+import bank.model.LoanAccount;
+import bank.model.SavingsAccount;
 
-import java.util.ArrayList;
-import java.util.List;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonDeserializationContext;
+import com.google.gson.JsonDeserializer;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonIOException;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonSyntaxException;
+import com.google.gson.TypeAdapter;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import com.google.gson.stream.JsonWriter;
+
+import java.lang.reflect.Type;
+
+import java.io.IOException;
+import java.io.Reader;
+import java.io.Writer;
+import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 /**
  * ============================================================================
- *  JsonStore.java                                             [PERSON C OWNS]
+ *  JsonStore.java
+ *  Owner: John (smartdude879@gmail.com)
  * ============================================================================
  *
- *  WHAT THIS DOES:
- *      The ONLY class that actually reads and writes bank.json. Two methods:
+ *  ROLE:
+ *      The ONLY class allowed to touch bank.json directly. Reads and writes
+ *      the entire Bank object via Gson.
  *
- *          List<Customer> load()                       <-- read JSON file
- *          void save(List<Customer> customers)         <-- write JSON file
- *
- *      Everyone else uses DataRepository, which uses this.
- *
- *  THE BIG PROBLEM YOU NEED TO SOLVE:
- *      `Account` is abstract with three subclasses. Plain Gson doesn't know
- *      which subclass to build when it sees `{"type":"CHECKING", ...}`. You
- *      have two options:
- *
- *      OPTION 1 (recommended): Custom JsonDeserializer / JsonSerializer.
- *          Read the "type" field manually, then build the matching subclass.
- *          More code but transparent.
- *
- *      OPTION 2: Gson's RuntimeTypeAdapterFactory (in gson-extras).
- *          Less code but adds a dependency.
- *
- *      The example below uses Option 1.
- *
- *  EXAMPLE PATTERN (rough sketch -- don't copy verbatim):
- *
- *      Gson gson = new GsonBuilder()
- *          .registerTypeAdapter(Account.class, new AccountAdapter())
- *          .registerTypeAdapter(BigDecimal.class, new BigDecimalAdapter())
- *          .registerTypeAdapter(LocalDateTime.class, new LocalDateTimeAdapter())
- *          .setPrettyPrinting()
- *          .create();
- *
- *      // load:
- *      try (Reader r = Files.newBufferedReader(path)) {
- *          Type listType = new TypeToken<List<Customer>>(){}.getType();
- *          return gson.fromJson(r, listType);
- *      }
- *
- *      // save:
- *      try (Writer w = Files.newBufferedWriter(path)) {
- *          gson.toJson(customers, w);
- *      }
- *
- *  THE Account ADAPTER (sketch):
- *
- *      class AccountAdapter implements JsonDeserializer<Account>, JsonSerializer<Account> {
- *          public Account deserialize(JsonElement el, Type t, JsonDeserializationContext ctx) {
- *              JsonObject o = el.getAsJsonObject();
- *              String type = o.get("type").getAsString();
- *              switch (type) {
- *                  case "CHECKING": return ctx.deserialize(o, CheckingAccount.class);
- *                  case "SAVINGS":  return ctx.deserialize(o, SavingsAccount.class);
- *                  case "LOAN":     return ctx.deserialize(o, LoanAccount.class);
- *                  default: throw new JsonParseException("unknown type: " + type);
- *              }
- *          }
- *          public JsonElement serialize(Account src, Type t, JsonSerializationContext ctx) {
- *              return ctx.serialize(src, src.getClass());   // writes correct subclass
- *          }
- *      }
- *
- *  EDGE CASES TO HANDLE:
- *      - File doesn't exist yet (first run) -> return empty list, don't crash.
- *      - File is corrupted JSON -> back it up to bank.json.bak, return empty,
- *        log a warning.
- *      - Atomic save: write to bank.json.tmp first, then rename. Otherwise a
- *        crash mid-write corrupts the data.
+ *  HANDLES:
+ *      - First run (file doesn't exist)  → returns empty Bank
+ *      - Corrupted JSON                  → backs up the bad file, returns empty Bank
+ *      - BigDecimal precision            → custom TypeAdapter
+ *      - LocalDateTime                   → ISO-8601 string adapter
+ *      - Account polymorphism            → manual "type" field switch
+ *      - Atomic writes                   → temp file + atomic rename
  * ============================================================================
  */
 public class JsonStore {
 
-    private final String filePath;
+    // ── Configuration ────────────────────────────────────────────────────────
+    private static final String DATA_DIR  = "data";
+    private static final String DATA_FILE = DATA_DIR + "/bank.json";
+    private static final String BACKUP_SUFFIX = ".bak";
 
-    public JsonStore(String filePath) {
-        // TODO: assign the filePath ("data/bank.json").
-        this.filePath = filePath;
+    private final Gson gson;
+
+    public JsonStore() {
+        this.gson = buildGson();
+    }
+
+    // ── Public API ────────────────────────────────────────────────────────────
+
+    /**
+     * Saves the entire Bank to disk.
+     * Writes to a temp file first then atomically replaces the real file
+     * so a crash mid-write never corrupts the existing data.
+     *
+     * @param bank the bank state to persist
+     * @throws IOException if the file cannot be written
+     */
+    public void save(Bank bank) throws IOException {
+        Files.createDirectories(Paths.get(DATA_DIR));
+
+        Path tempPath = Paths.get(DATA_FILE + ".tmp");
+        try (Writer writer = Files.newBufferedWriter(tempPath)) {
+            gson.toJson(bank, writer);
+        }
+
+        try {
+            Files.move(tempPath, Paths.get(DATA_FILE),
+                    StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException atomicFailed) {
+            // Some Windows filesystems don't support ATOMIC_MOVE — fall back
+            Files.move(tempPath, Paths.get(DATA_FILE),
+                    StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     /**
-     * Read the JSON file and return the list of customers.
-     * Returns an empty list if the file doesn't exist.
+     * Loads the Bank from disk.
+     * Returns an empty Bank if the file doesn't exist.
+     * Backs up corrupted JSON and returns an empty Bank.
+     *
+     * @return the loaded bank, or a fresh empty Bank
      */
-    public List<Customer> load() {
-        // TODO:
-        //  1. If file doesn't exist, return new ArrayList<>().
-        //  2. Build the configured Gson (with the AccountAdapter).
-        //  3. Read the file, deserialize into List<Customer>.
-        //  4. If JSON is corrupted, back it up to <path>.bak, return empty list.
-        //  5. Return the list.
-        return new ArrayList<>();
+    public Bank load() {
+        Path filePath = Paths.get(DATA_FILE);
+
+        if (!Files.exists(filePath)) {
+            System.out.println("[JsonStore] No bank.json found — starting with an empty bank.");
+            return new Bank();
+        }
+
+        try (Reader reader = Files.newBufferedReader(filePath)) {
+            Bank bank = gson.fromJson(reader, Bank.class);
+            if (bank == null) {
+                System.out.println("[JsonStore] bank.json was empty — starting fresh.");
+                return new Bank();
+            }
+            System.out.println("[JsonStore] Loaded bank.json successfully.");
+            return bank;
+
+        } catch (JsonSyntaxException | JsonIOException e) {
+            backupCorruptedFile(filePath);
+            System.err.println("[JsonStore] WARNING: bank.json is corrupted. Backup created. Starting fresh.");
+            return new Bank();
+
+        } catch (IOException e) {
+            System.err.println("[JsonStore] Could not read bank.json: " + e.getMessage());
+            return new Bank();
+        }
+    }
+
+    // ── Internal helpers ──────────────────────────────────────────────────────
+
+    private void backupCorruptedFile(Path original) {
+        String timestamp = LocalDateTime.now()
+                .format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        Path backup = Paths.get(DATA_FILE + "." + timestamp + BACKUP_SUFFIX);
+        try {
+            Files.copy(original, backup, StandardCopyOption.REPLACE_EXISTING);
+            System.err.println("[JsonStore] Backup saved to: " + backup);
+        } catch (IOException ex) {
+            System.err.println("[JsonStore] Could not create backup: " + ex.getMessage());
+        }
+    }
+
+    private Gson buildGson() {
+        return new GsonBuilder()
+                .setPrettyPrinting()
+                .registerTypeAdapter(BigDecimal.class, bigDecimalAdapter())
+                .registerTypeAdapter(LocalDateTime.class, localDateTimeAdapter())
+                .registerTypeAdapter(Account.class, accountDeserializer())
+                .create();
+    }
+
+    // ── Custom TypeAdapters ───────────────────────────────────────────────────
+
+    /** Preserves exact decimal strings (e.g. "500.00") so no floating-point drift. */
+    private TypeAdapter<BigDecimal> bigDecimalAdapter() {
+        return new TypeAdapter<BigDecimal>() {
+            @Override
+            public void write(JsonWriter out, BigDecimal value) throws IOException {
+                if (value == null) { out.nullValue(); return; }
+                out.value(value.toPlainString());
+            }
+            @Override
+            public BigDecimal read(JsonReader in) throws IOException {
+                if (in.peek() == JsonToken.NULL) { in.nextNull(); return null; }
+                return new BigDecimal(in.nextString());
+            }
+        };
+    }
+
+    /** Stores LocalDateTime as an ISO-8601 string. */
+    private TypeAdapter<LocalDateTime> localDateTimeAdapter() {
+        return new TypeAdapter<LocalDateTime>() {
+            @Override
+            public void write(JsonWriter out, LocalDateTime value) throws IOException {
+                if (value == null) { out.nullValue(); return; }
+                out.value(value.toString());
+            }
+            @Override
+            public LocalDateTime read(JsonReader in) throws IOException {
+                if (in.peek() == JsonToken.NULL) { in.nextNull(); return null; }
+                return LocalDateTime.parse(in.nextString());
+            }
+        };
     }
 
     /**
-     * Write the list of customers to JSON. Atomic: write to .tmp then rename.
+     * Handles Account polymorphism. Gson cannot guess which subclass of
+     * Account to build, so we read the "type" field by hand and call back
+     * into Gson with the right concrete class.
      */
-    public void save(List<Customer> customers) {
-        // TODO:
-        //  1. Build the configured Gson.
-        //  2. Write JSON to "<path>.tmp".
-        //  3. Atomically rename ".tmp" -> filePath
-        //     (Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE,
-        //                 StandardCopyOption.REPLACE_EXISTING)).
+    private JsonDeserializer<Account> accountDeserializer() {
+        return new JsonDeserializer<Account>() {
+            @Override
+            public Account deserialize(JsonElement json, Type typeOfT,
+                                       JsonDeserializationContext context) {
+                JsonObject obj = json.getAsJsonObject();
+                String type = obj.has("type") ? obj.get("type").getAsString() : "";
+
+                switch (type.toUpperCase()) {
+                    case "CHECKING":
+                        return context.deserialize(obj, CheckingAccount.class);
+                    case "SAVINGS":
+                        return context.deserialize(obj, SavingsAccount.class);
+                    case "LOAN":
+                        return context.deserialize(obj, LoanAccount.class);
+                    default:
+                        throw new JsonParseException("Unknown account type: " + type);
+                }
+            }
+        };
     }
 }

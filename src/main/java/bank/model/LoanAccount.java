@@ -48,6 +48,27 @@ public class LoanAccount extends Account {
     }
 
     /**
+     * Applies a payment toward the outstanding debt.
+     *
+     * <p>The loan invariant is that {@code balance} is zero or negative — it
+     * represents debt. A positive credit reduces (pays down) the debt. A
+     * negative credit (used by the InterestCalculator) grows the debt. Paying
+     * more than what is owed is rejected so the balance never goes positive.
+     *
+     * @throws IllegalStateException if the payment would overpay the loan.
+     */
+    @Override
+    public BigDecimal credit(BigDecimal amount) {
+        BigDecimal projected = this.balance.add(amount);
+        if (projected.compareTo(BigDecimal.ZERO) > 0) {
+            throw new IllegalStateException(
+                    "Payment rejected: amount exceeds outstanding debt of $"
+                            + getOutstandingDebt() + " on loan " + id + ".");
+        }
+        return super.credit(amount);
+    }
+
+    /**
      * Calculates the monthly interest rate based on the annual rate.
      * 
      * @return The monthly interest rate (Annual Rate / 12).

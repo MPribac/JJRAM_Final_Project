@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<h2>JJRAM Banking System</h2>
+
+<p>
+A small, terminal-only Java banking simulator built as a team project for
+UMBC. A customer logs in with an ID and PIN, manages three account types
+(Checking, Savings, Loan), moves money between them, and sees printed
+statements &mdash; all persisted to a single JSON file between runs.
+</p>
+
+<h3>Packages at a glance</h3>
+
+<ul>
+  <li><b>bank</b> &mdash; the <code>Main</code> entry point. Wires every
+      service together and runs the menu loop.</li>
+  <li><b>bank.model</b> &mdash; pure data + behavior:
+      <code>Bank</code>, <code>Customer</code>, <code>Account</code> (with
+      <code>CheckingAccount</code>, <code>SavingsAccount</code>,
+      <code>LoanAccount</code>), <code>Transaction</code>,
+      <code>TransactionType</code>.</li>
+  <li><b>bank.auth</b> &mdash; <code>AuthService</code> handles login,
+      lockout after 3 failed PINs, and logout.</li>
+  <li><b>bank.service</b> &mdash; <code>TransactionService</code> performs
+      deposits, withdrawals, and atomic transfers. <code>OverdraftPolicy</code>
+      decides whether a withdrawal can go through. <code>InterestCalculator</code>
+      walks every account once a month and applies interest.</li>
+  <li><b>bank.reporting</b> &mdash; <code>StatementGenerator</code> prints
+      formatted monthly statements. <code>TransactionHistory</code> supports
+      filtered searches by date, account, type, amount, and keyword.</li>
+  <li><b>bank.persistence</b> &mdash; <code>DataRepository</code> is the
+      single front door to persisted state. <code>JsonStore</code> is the
+      only class that touches <code>bank.json</code> directly.</li>
+</ul>
+
+<h3>Team</h3>
+
+<ul>
+  <li><b>Abdul Rahman Fornah</b> &middot; afornah1@umbc.edu &mdash; models, accounts, authentication, wiring</li>
+  <li><b>Max Pribac</b> &middot; mpribac@umbc.edu &mdash; transactions, overdraft, interest</li>
+  <li><b>John</b> &middot; smartdude879@gmail.com &mdash; statements, history, JSON persistence</li>
+  <li><b>Jordon Tang</b> &middot; jtang10@umbc.edu &mdash; reviewer / helper on the authentication track</li>
+  <li><b>Ramya Bommakanti</b> &middot; ramyab1@umbc.edu &mdash; debugger / QA</li>
+</ul>
+
+<p>
+For implementation notes, see the per-person guides in the repository root:
+<code>ABDUL_RAHMAN_FORNAH_GUIDE.md</code>, <code>MAX_PRIBAC_GUIDE.md</code>,
+<code>JOHN_GUIDE.md</code>.
+</p>
+
+</body>
+</html>

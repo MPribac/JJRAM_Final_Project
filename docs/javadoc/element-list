@@ -1,0 +1,6 @@
+bank
+bank.auth
+bank.model
+bank.persistence
+bank.reporting
+bank.service

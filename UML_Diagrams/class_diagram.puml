@@ -1,0 +1,171 @@
+@startuml JJRAM_Banking_System
+
+' ============================================================================
+'  JJRAM Banking System — Class Diagram (PlantUML source)
+'  Render with the PlantUML plugin for IntelliJ / VS Code, or paste at
+'  https://www.plantuml.com/plantuml
+' ============================================================================
+
+title JJRAM Banking System — Class Diagram
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam linetype ortho
+skinparam roundCorner 8
+skinparam class {
+    BackgroundColor #f7f8fb
+    BorderColor     #2563eb
+    ArrowColor      #1d4ed8
+    HeaderBackgroundColor #dbe4ff
+}
+skinparam package {
+    BackgroundColor #ffffff
+    BorderColor     #94a3b8
+}
+
+package "bank.model" {
+    class Bank {
+        - customers : List<Customer>
+        + getCustomers() : List<Customer>
+    }
+
+    class Customer {
+        - id : String
+        - name : String
+        - pinHash : String
+        - failedLoginAttempts : int
+        - locked : boolean
+        - accounts : List<Account>
+        - transactions : List<Transaction>
+        + verifyPin(rawPin : String) : boolean
+        + findAccount(id : String) : Account
+        + addAccount(a : Account)
+        + recordTransaction(t : Transaction)
+        + unlock()
+        + {static} hashPin(rawPin : String) : String
+    }
+
+    abstract class Account {
+        # type : String
+        # id : String
+        # balance : BigDecimal
+        + credit(amount : BigDecimal) : BigDecimal
+        + debit(amount : BigDecimal) : BigDecimal
+        + {abstract} getMonthlyInterestRate() : BigDecimal
+    }
+
+    class CheckingAccount {
+        - overdraftLimit : BigDecimal
+        + debit(amount : BigDecimal) : BigDecimal
+        + getOverdraftLimit() : BigDecimal
+    }
+
+    class SavingsAccount {
+        - interestRate : BigDecimal
+        + debit(amount : BigDecimal) : BigDecimal
+        + getAnnualInterestRate() : BigDecimal
+    }
+
+    class LoanAccount {
+        - interestRate : BigDecimal
+        + debit(amount : BigDecimal) : BigDecimal
+        + getOutstandingDebt() : BigDecimal
+    }
+
+    class Transaction {
+        - id : String
+        - type : TransactionType
+        - accountId : String
+        - amount : BigDecimal
+        - timestamp : LocalDateTime
+        - description : String
+        - relatedAccountId : String
+    }
+
+    enum TransactionType {
+        DEPOSIT
+        WITHDRAW
+        TRANSFER_OUT
+        TRANSFER_IN
+        INTEREST
+        FEE
+    }
+}
+
+package "bank.auth" {
+    class AuthService {
+        - repository : DataRepository
+        - currentUser : Customer
+        + login(id : String, pin : String) : Customer
+        + logout()
+        + unlock(id : String) : boolean
+    }
+}
+
+package "bank.service" {
+    class TransactionService {
+        - repository : DataRepository
+        - overdraftPolicy : OverdraftPolicy
+        + deposit(c : Customer, accountId : String, amount : BigDecimal)
+        + withdraw(c : Customer, accountId : String, amount : BigDecimal)
+        + transfer(c : Customer, fromId : String, toId : String, amount : BigDecimal)
+    }
+
+    class OverdraftPolicy {
+        - overdraftFee : BigDecimal
+        + canWithdraw(a : Account, amount : BigDecimal) : boolean
+        + overdraftFeeFor(a : Account, amount : BigDecimal) : BigDecimal
+    }
+
+    class InterestCalculator {
+        - repository : DataRepository
+        + applyMonthlyInterest() : int
+    }
+}
+
+package "bank.persistence" {
+    class DataRepository {
+        - store : JsonStore
+        - bank : Bank
+        + load()
+        + save()
+        + findCustomer(id : String) : Customer
+        + allCustomers() : List<Customer>
+        + addCustomer(c : Customer)
+    }
+
+    class JsonStore {
+        - gson : Gson
+        + save(bank : Bank)
+        + load() : Bank
+    }
+}
+
+package "bank.reporting" {
+    class StatementGenerator {
+        + generate(c : Customer, from : LocalDateTime, to : LocalDateTime)
+    }
+
+    class TransactionHistory {
+        + search(c : Customer, criteria : SearchCriteria) : List<Transaction>
+        + searchAndPrint(c : Customer, criteria : SearchCriteria)
+    }
+}
+
+' Relationships
+Bank "1" *-- "*" Customer
+Customer "1" *-- "*" Account
+Customer "1" *-- "*" Transaction
+Account <|-- CheckingAccount
+Account <|-- SavingsAccount
+Account <|-- LoanAccount
+Transaction --> TransactionType
+
+AuthService --> DataRepository
+TransactionService --> DataRepository
+TransactionService --> OverdraftPolicy
+InterestCalculator --> DataRepository
+DataRepository --> JsonStore
+DataRepository --> Bank
+
+@enduml

@@ -1,71 +1,134 @@
 package bank.persistence;
 
+import bank.model.Bank;
 import bank.model.Customer;
 
-import java.util.ArrayList;
+import java.io.IOException;
 import java.util.List;
 
 /**
  * ============================================================================
- *  DataRepository.java                                        [PERSON C OWNS]
+ *  DataRepository.java
+ *  Owner: John (smartdude879@gmail.com)
  * ============================================================================
  *
- *  WHAT THIS DOES:
- *      The "front door" for data. Nobody else talks to JsonStore directly --
- *      they go through here. Holds the list of customers in memory; saves to
- *      disk when asked.
+ *  ROLE:
+ *      The single "front door" to the bank's persisted state. Everyone else
+ *      (AuthService, TransactionService, InterestCalculator) talks to this
+ *      class — never to JsonStore directly.
  *
- *  WHO USES IT:
- *      - AuthService            -> findCustomer
- *      - TransactionService     -> save() after every transaction
- *      - InterestCalculator     -> allCustomers() to loop, then save()
- *      - Main                   -> load() at startup, save() at shutdown
+ *  USAGE PATTERN:
+ *      DataRepository repo = new DataRepository();
+ *      repo.load();                  // call once at startup
+ *      ...
+ *      repo.findCustomer("1001");    // used by AuthService
+ *      repo.save();                  // call after every change
  *
- *  WHY THIS EXISTS:
- *      If we ever swap JSON for SQLite, only THIS class changes. The rest of
- *      the app keeps working.
- *
- *  EXAMPLE PATTERN:
- *
- *      public Customer findCustomer(String id) {
- *          for (Customer c : customers) {
- *              if (c.getId().equals(id)) return c;
- *          }
- *          return null;
- *      }
+ *  WHY THIS WRAPPER EXISTS:
+ *      If we ever swap JSON for a database, only THIS class changes. The rest
+ *      of the app keeps working unchanged.
  * ============================================================================
  */
 public class DataRepository {
 
     private final JsonStore store;
-    private List<Customer> customers = new ArrayList<>();
+    private Bank bank;
 
-    public DataRepository(String filePath) {
-        // TODO: this.store = new JsonStore(filePath);
-        this.store = new JsonStore(filePath);
+    // ── Construction ──────────────────────────────────────────────────────────
+
+    public DataRepository() {
+        this.store = new JsonStore();
     }
 
-    /** Load everything from disk. Call once at startup. */
+    /** Package-private constructor for testing with a stub JsonStore. */
+    DataRepository(JsonStore store) {
+        this.store = store;
+    }
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    /**
+     * Loads bank state from disk. Call once at program startup.
+     * If the file is missing or corrupted the bank is initialised empty.
+     */
     public void load() {
-        // TODO: this.customers = store.load();
+        this.bank = store.load();
     }
 
-    /** Persist current state to disk. Call after every change. */
+    /**
+     * Persists the current in-memory bank state to disk.
+     * Errors are logged — the program never crashes from a save failure.
+     */
     public void save() {
-        // TODO: store.save(customers);
+        if (bank == null) {
+            System.err.println("[DataRepository] save() called before load() — nothing to save.");
+            return;
+        }
+        try {
+            store.save(bank);
+        } catch (IOException e) {
+            System.err.println("[DataRepository] Failed to save bank.json: " + e.getMessage());
+        }
     }
 
-    public Customer findCustomer(String id) {
-        // TODO: loop through customers, return the match or null.
+    // ── Customer queries ──────────────────────────────────────────────────────
+
+    /**
+     * Finds a customer by their ID.
+     *
+     * @param customerId the customer's unique ID
+     * @return the matching customer, or {@code null} if no such customer exists
+     */
+    public Customer findCustomer(String customerId) {
+        assertLoaded();
+        for (Customer c : bank.getCustomers()) {
+            if (c.getId().equals(customerId)) {
+                return c;
+            }
+        }
         return null;
     }
 
+    /**
+     * Returns every customer in the bank.
+     * Used by InterestCalculator to loop over everyone.
+     */
     public List<Customer> allCustomers() {
-        return customers;
+        assertLoaded();
+        return bank.getCustomers();
     }
 
-    /** Used at setup time / by tests to seed data. */
-    public void addCustomer(Customer c) {
-        // TODO: customers.add(c);
+    /**
+     * Adds a new customer to the bank.
+     * Throws if a customer with that ID already exists.
+     */
+    public void addCustomer(Customer customer) {
+        assertLoaded();
+        boolean exists = bank.getCustomers().stream()
+                .anyMatch(c -> c.getId().equals(customer.getId()));
+        if (exists) {
+            throw new IllegalArgumentException(
+                    "Customer with ID " + customer.getId() + " already exists.");
+        }
+        bank.getCustomers().add(customer);
+    }
+
+    // ── Low-level access ──────────────────────────────────────────────────────
+
+    /**
+     * Returns the raw Bank object — avoid using outside of tests.
+     */
+    public Bank getBank() {
+        assertLoaded();
+        return bank;
+    }
+
+    // ── Internal helpers ──────────────────────────────────────────────────────
+
+    private void assertLoaded() {
+        if (bank == null) {
+            throw new IllegalStateException(
+                    "DataRepository.load() must be called before any data access.");
+        }
     }
 }

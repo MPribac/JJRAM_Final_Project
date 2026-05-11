@@ -1,0 +1,1 @@
+packageSearchIndex = [{"l":"All Packages","u":"allpackages-index.html","k":"18"},{"l":"bank"},{"l":"bank.auth"},{"l":"bank.model"},{"l":"bank.persistence"},{"l":"bank.reporting"},{"l":"bank.service"}];updateSearchResults();

@@ -1,0 +1,50 @@
+@startuml JJRAM_Login_Sequence
+
+' ============================================================================
+'  JJRAM Banking System — Login Sequence Diagram (PlantUML source)
+' ============================================================================
+
+title JJRAM Banking System — Login Flow
+
+skinparam shadowing false
+skinparam sequenceArrowThickness 1.5
+skinparam roundCorner 8
+skinparam sequence {
+    ParticipantBackgroundColor #f7f8fb
+    ParticipantBorderColor     #2563eb
+    LifeLineBorderColor        #2563eb
+    ActorBackgroundColor       #dbe4ff
+}
+
+actor User
+participant Main
+participant AuthService
+participant DataRepository
+participant Customer
+participant JsonStore
+
+User -> Main : Customer ID, PIN
+Main -> AuthService : login(id, pin)
+AuthService -> DataRepository : findCustomer(id)
+DataRepository --> AuthService : Customer (or null)
+
+alt customer is null
+    AuthService --> Main : null
+else customer exists
+    AuthService -> Customer : verifyPin(pin)
+    Customer -> Customer : hashPin(pin) and compare
+    alt pin matches
+        Customer --> AuthService : true (resets failedAttempts)
+        AuthService -> DataRepository : save()
+        DataRepository -> JsonStore : save(bank)
+        AuthService --> Main : Customer
+    else pin wrong
+        Customer --> AuthService : false (increments counter, locks at 3)
+        AuthService -> DataRepository : save()
+        AuthService --> Main : null
+    end
+end
+
+Main --> User : Welcome OR "try again"
+
+@enduml

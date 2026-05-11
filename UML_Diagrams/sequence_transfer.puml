@@ -1,0 +1,66 @@
+@startuml JJRAM_Transfer_Sequence
+
+' ============================================================================
+'  JJRAM Banking System — Transfer Sequence Diagram (with rollback)
+' ============================================================================
+
+title JJRAM Banking System — Transfer Flow (atomic with rollback)
+
+skinparam shadowing false
+skinparam sequenceArrowThickness 1.5
+skinparam roundCorner 8
+skinparam sequence {
+    ParticipantBackgroundColor #f7f8fb
+    ParticipantBorderColor     #2563eb
+    LifeLineBorderColor        #2563eb
+    ActorBackgroundColor       #dbe4ff
+}
+
+actor User
+participant Main
+participant TransactionService
+participant OverdraftPolicy
+participant "Account (from)" as FromAccount
+participant "Account (to)"   as ToAccount
+participant Customer
+participant DataRepository
+
+User -> Main : transfer fromId, toId, amount
+Main -> TransactionService : transfer(customer, fromId, toId, amount)
+
+TransactionService -> TransactionService : requirePositive(amount)
+TransactionService -> Customer : findAccount(fromId)
+Customer --> TransactionService : fromAccount
+TransactionService -> Customer : findAccount(toId)
+Customer --> TransactionService : toAccount
+
+TransactionService -> OverdraftPolicy : canWithdraw(from, amount)
+OverdraftPolicy --> TransactionService : true / false
+
+alt not allowed
+    TransactionService --> Main : throws IllegalStateException
+else allowed
+    TransactionService -> FromAccount : debit(amount)
+    FromAccount --> TransactionService : new balance
+
+    alt to.credit succeeds
+        TransactionService -> ToAccount : credit(amount)
+        ToAccount --> TransactionService : new balance
+        TransactionService -> Customer : recordTransaction(TRANSFER_OUT)
+        TransactionService -> Customer : recordTransaction(TRANSFER_IN)
+        TransactionService -> DataRepository : save()
+        TransactionService --> Main : ok
+    else to.credit throws
+        TransactionService -> FromAccount : credit(amount)
+        note right of TransactionService
+            ROLLBACK
+            Put the money back on
+            the source so the customer
+            never loses funds on a
+            half-finished transfer.
+        end note
+        TransactionService --> Main : rethrows exception
+    end
+end
+
+@enduml

@@ -1,0 +1,15 @@
+# Build output
+target/
+*.class
+
+# Maven dependencies fetched locally (used only when mvn is unavailable)
+lib/
+
+# Data files generated at runtime
+data/
+
+# IDE noise
+.idea/git_toolbox_prj.xml
+*.iml.bak
+.vscode/
+*.swp

@@ -7,6 +7,8 @@
     <groupId>bank</groupId>
     <artifactId>banking-system</artifactId>
     <version>1.0-SNAPSHOT</version>
+    <name>JJRAM Banking System</name>
+    <description>Team final project — terminal Java banking simulator.</description>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
@@ -41,10 +43,46 @@
                     <mainClass>bank.Main</mainClass>
                 </configuration>
             </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
+            </plugin>
+
+            <!--
+                Generates the styled JavaDoc into docs/javadoc/ so it can be
+                opened directly in a browser without any web server.
+
+                    mvn javadoc:javadoc
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.6.3</version>
+                <configuration>
+                    <reportOutputDirectory>${project.basedir}/docs</reportOutputDirectory>
+                    <destDir>javadoc</destDir>
+                    <doctitle>JJRAM Banking System — API Reference</doctitle>
+                    <windowtitle>JJRAM Banking System</windowtitle>
+                    <header><![CDATA[<span style="font-weight:600">JJRAM Banking System</span>]]></header>
+                    <bottom><![CDATA[<em>JJRAM Banking System &middot; UMBC Team Final Project &middot; 2026</em>]]></bottom>
+                    <overview>${project.basedir}/javadoc-overview.html</overview>
+                    <addStylesheets>
+                        <addStylesheet>${project.basedir}/javadoc-overrides.css</addStylesheet>
+                    </addStylesheets>
+                    <show>protected</show>
+                    <nohelp>false</nohelp>
+                    <linksource>true</linksource>
+                    <splitindex>true</splitindex>
+                    <author>true</author>
+                    <use>true</use>
+                    <quiet>true</quiet>
+                    <doclint>none</doclint>
+                    <encoding>UTF-8</encoding>
+                    <docencoding>UTF-8</docencoding>
+                    <charset>UTF-8</charset>
+                </configuration>
             </plugin>
         </plugins>
     </build>

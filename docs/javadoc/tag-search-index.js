@@ -1,0 +1,1 @@
+tagSearchIndex = [{"l":"JJRAM Banking System","h":"Overview","k":"16","u":"index.html#jjram-banking-system-heading"},{"l":"Packages at a glance","h":"Overview","k":"16","u":"index.html#packages-at-a-glance-heading"},{"l":"Team","h":"Overview","k":"16","u":"index.html#team-heading"}];updateSearchResults();

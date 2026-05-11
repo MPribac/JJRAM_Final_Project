@@ -1,0 +1,38 @@
+@startuml JJRAM_Package_Diagram
+
+' ============================================================================
+'  JJRAM Banking System — Package Dependency Diagram
+' ============================================================================
+
+title JJRAM Banking System — Package Dependencies
+
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam package {
+    BackgroundColor #f7f8fb
+    BorderColor     #2563eb
+    FontStyle       bold
+}
+skinparam ArrowColor #1d4ed8
+
+package "bank (Main)" as bank #dbe4ff
+package "bank.auth"        as auth
+package "bank.service"     as service
+package "bank.reporting"   as reporting
+package "bank.persistence" as persistence
+package "bank.model"       as model
+
+bank --> auth
+bank --> service
+bank --> reporting
+bank --> persistence
+bank --> model
+
+auth        --> persistence
+auth        --> model
+service     --> persistence
+service     --> model
+reporting   --> model
+persistence --> model
+
+@enduml

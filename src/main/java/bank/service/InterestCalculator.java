@@ -13,37 +13,23 @@ import java.math.RoundingMode;
 
 /**
  * ============================================================================
- *  InterestCalculator.java                                    [PERSON B OWNS]
+ *  InterestCalculator.java
+ *  Owner: Max Pribac (mpribac@umbc.edu)
  * ============================================================================
  *
- *  WHAT THIS DOES:
- *      Once a month, walk every customer, every account, and apply interest:
- *        - SavingsAccount: balance grows.        balance += balance * monthlyRate
- *        - LoanAccount:    debt grows.           balance += balance * monthlyRate
- *                          (balance is negative, so this makes it MORE negative)
- *        - CheckingAccount: skip (rate is 0 anyway).
+ *  ROLE:
+ *      Once a month, walk every customer and every account, applying interest:
+ *        - SavingsAccount : balance grows
+ *        - LoanAccount    : debt grows (balance becomes more negative)
+ *        - CheckingAccount: skipped (monthly rate is zero anyway)
  *
  *      Each interest application is itself a Transaction (type = INTEREST).
  *
- *  WHEN IT RUNS:
- *      The user picks "Apply monthly interest" from the admin menu in Main.
- *      In a real bank a scheduler would call this on the 1st of each month;
- *      for our demo, the menu choice is fine.
- *
- *  EXAMPLE PATTERN for a single account:
- *
- *      BigDecimal interest = account.getBalance()
- *                                   .multiply(account.getMonthlyInterestRate())
- *                                   .setScale(2, RoundingMode.HALF_UP);
- *      account.credit(interest);
- *      customer.recordTransaction(
- *          new Transaction(TransactionType.INTEREST, account.getId(), interest.abs(),
- *              "Monthly interest"));
- *
  *  GOTCHA:
- *      For loans, balance is negative, so balance * rate is negative -- credit-ing
- *      a negative number makes the balance MORE negative, which is correct
- *      (debt grew). Just record the transaction with .abs() for display.
+ *      For loans, the balance is negative, so balance * rate is negative.
+ *      Calling credit() with a negative number makes the balance MORE negative,
+ *      which is what we want (debt grew). For display we record the
+ *      transaction with .abs() so users always see a positive interest amount.
  * ============================================================================
  */
 public class InterestCalculator {
@@ -55,17 +41,48 @@ public class InterestCalculator {
     }
 
     /**
-     * Loop every customer, every account; apply interest where applicable.
-     * Save once at the end.
+     * Loops every customer and every account, applying monthly interest where
+     * applicable. Saves once at the end.
+     *
+     * @return total number of accounts that received interest
      */
-    public void applyMonthlyInterest() {
-        // TODO:
-        //  for each Customer c in repository.allCustomers():
-        //      for each Account a in c.getAccounts():
-        //          if (a instanceof SavingsAccount || a instanceof LoanAccount):
-        //              compute interest using a.getMonthlyInterestRate()
-        //              a.credit(interest)   // works for both types
-        //              c.recordTransaction(new Transaction(INTEREST, a.getId(), interest.abs(), "..."))
-        //  repository.save();
+    public int applyMonthlyInterest() {
+        int affected = 0;
+        for (Customer customer : repository.allCustomers()) {
+            for (Account account : customer.getAccounts()) {
+                if (!(account instanceof SavingsAccount) && !(account instanceof LoanAccount)) {
+                    continue;
+                }
+
+                BigDecimal rate = account.getMonthlyInterestRate();
+                if (rate.compareTo(BigDecimal.ZERO) == 0) {
+                    continue;
+                }
+
+                BigDecimal interest = account.getBalance()
+                        .multiply(rate)
+                        .setScale(2, RoundingMode.HALF_UP);
+
+                if (interest.compareTo(BigDecimal.ZERO) == 0) {
+                    continue;
+                }
+
+                account.credit(interest);
+
+                String description = (account instanceof LoanAccount)
+                        ? "Monthly loan interest"
+                        : "Monthly savings interest";
+
+                customer.recordTransaction(new Transaction(
+                        TransactionType.INTEREST,
+                        account.getId(),
+                        interest.abs(),
+                        description));
+
+                affected++;
+            }
+        }
+        repository.save();
+        return affected;
     }
 }
